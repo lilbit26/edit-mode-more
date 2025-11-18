@@ -28,8 +28,8 @@ end
 local function updateDialog(systemFrame)
     if not EditModeSystemSettingsDialog:IsShown() then return end
 
-    -- divider + x offset + y offset + anchor
-    local height = EditModeSystemSettingsDialog:GetHeight() + (16 + 32 + 32 + 32)
+    -- divider + x offset + y offset
+    local height = EditModeSystemSettingsDialog:GetHeight() - 6 + (16 + 32 + 32)
     EditModeSystemSettingsDialog:SetHeight(height)
 
     emm.frame:ClearAllPoints()
