@@ -1,0 +1,5 @@
+## Interface: 120000
+## Title: Edit Mode More
+## Version: 0.0.0
+
+EditModeMore.lua
