@@ -25,21 +25,84 @@ local function updateCurrentSettings(systemFrame)
     emm.frame.yOffsetContainer.editBox:SetText(tostring(toRoundedNumber(offsetY)))
 end
 
+local function disableOffsetSettings()
+    emm.frame.xOffsetContainer.editBox:Disable()
+    emm.frame.xOffsetContainer.editBox:SetAlpha(0.5)
+
+    emm.frame.yOffsetContainer.editBox:Disable()
+    emm.frame.yOffsetContainer.editBox:SetAlpha(0.5)
+
+    emm.frame.xOffsetContainer.leftButton:Disable()
+    emm.frame.xOffsetContainer.leftButton:SetAlpha(0.5)
+
+    emm.frame.xOffsetContainer.rightButton:Disable()
+    emm.frame.xOffsetContainer.rightButton:SetAlpha(0.5)
+
+    emm.frame.yOffsetContainer.downButton:Disable()
+    emm.frame.yOffsetContainer.downButton:SetAlpha(0.5)
+
+    emm.frame.yOffsetContainer.upButton:Disable()
+    emm.frame.yOffsetContainer.upButton:SetAlpha(0.5)
+
+    emm.frame.disabledMessage:Show()
+end
+
+local function enableOffsetSettings()
+    emm.frame.xOffsetContainer.editBox:Enable()
+    emm.frame.xOffsetContainer.editBox:SetAlpha(1)
+
+    emm.frame.yOffsetContainer.editBox:Enable()
+    emm.frame.yOffsetContainer.editBox:SetAlpha(1)
+
+    emm.frame.xOffsetContainer.leftButton:Enable()
+    emm.frame.xOffsetContainer.leftButton:SetAlpha(1)
+
+    emm.frame.xOffsetContainer.rightButton:Enable()
+    emm.frame.xOffsetContainer.rightButton:SetAlpha(1)
+
+    emm.frame.yOffsetContainer.downButton:Enable()
+    emm.frame.yOffsetContainer.downButton:SetAlpha(1)
+
+    emm.frame.yOffsetContainer.upButton:Enable()
+    emm.frame.yOffsetContainer.upButton:SetAlpha(1)
+
+    emm.frame.disabledMessage:Hide()
+end
+
 local function updateDialog(systemFrame)
     if not EditModeSystemSettingsDialog:IsShown() then return end
 
+    updateCurrentSettings(systemFrame)
+    if emm.selectedFrame.isManagedFrame and emm.selectedFrame:IsInDefaultPosition() and emm.relativeTo:GetName() == "UIParentBottomManagedFrameContainer" then
+        disableOffsetSettings()
+    else
+        enableOffsetSettings()
+    end
+
     -- divider + x offset + y offset
-    local height = EditModeSystemSettingsDialog:GetHeight() - 6 + (16 + 32 + 32)
+    local height = (EditModeSystemSettingsDialog:GetHeight() - 6) + (16 + 32 + 32)
+    if emm.frame.disabledMessage:IsShown() then
+        height = height + 32
+    end
+
     EditModeSystemSettingsDialog:SetHeight(height)
 
     emm.frame:ClearAllPoints()
     emm.frame:SetPoint("TOPLEFT", EditModeSystemSettingsDialog.Buttons, "BOTTOMLEFT", 0, -2)
     emm.frame:SetPoint("BOTTOMRIGHT", EditModeSystemSettingsDialog, "BOTTOMRIGHT", -16, 16)
-
-    updateCurrentSettings(systemFrame)
 end
 
 local function applySettings()
+    if not emm.selectedFrame:CanBeMoved() then return end
+
+    if emm.selectedFrame.isManagedFrame and emm.selectedFrame:IsInDefaultPosition() then
+        emm.selectedFrame:BreakFromFrameManager()
+    end
+
+    emm.selectedFrame:ClearFrameSnap()
+    emm.selectedFrame:StopMovingOrSizing();
+
+    emm.selectedFrame:ClearAllPoints()
     emm.selectedFrame:SetPoint(emm.point, emm.relativeTo, emm.relativePoint, emm.offsetX, emm.offsetY)
 
     if emm.selectedFrame.OnSystemPositionChange then
@@ -72,14 +135,6 @@ local function main()
     frame:SetFrameStrata(EditModeSystemSettingsDialog:GetFrameStrata())
     frame:SetFrameLevel(EditModeSystemSettingsDialog:GetFrameLevel())
     emm.frame = frame
-
-    hooksecurefunc(EditModeSystemSettingsDialog, "UpdateDialog", function(_, systemFrame)
-        updateDialog(systemFrame)
-    end)
-
-    hooksecurefunc(EditModeSystemSettingsDialog, "AttachToSystemFrame", function(_, systemFrame)
-        updateDialog(systemFrame)
-    end)
 
     EditModeSystemSettingsDialog:HookScript("OnShow", function()
         emm.frame:Show()
@@ -181,9 +236,23 @@ local function main()
     end)
     frame.yOffsetContainer.editBox = yOffsetEditBox
 
+    local yOffsetDownButton = CreateFrame("Button", nil, yOffsetContainer, "UIPanelSquareButton")
+    SquareButton_SetIcon(yOffsetDownButton, "DOWN")
+    yOffsetDownButton:SetPoint("TOPLEFT", yOffsetEditBox, "TOPRIGHT", 10, -2)
+    yOffsetDownButton:SetSize(28, 28)
+    yOffsetDownButton:SetScript("OnClick", function()
+        if IsShiftKeyDown() then
+            emm.offsetY = emm.offsetY - 10
+        else
+            emm.offsetY = emm.offsetY - 1
+        end
+        applySettings()
+    end)
+    frame.yOffsetContainer.downButton = yOffsetDownButton
+
     local yOffsetUpButton = CreateFrame("Button", nil, yOffsetContainer, "UIPanelSquareButton")
     SquareButton_SetIcon(yOffsetUpButton, "UP")
-    yOffsetUpButton:SetPoint("TOPLEFT", yOffsetEditBox, "TOPRIGHT", 10, -2)
+    yOffsetUpButton:SetPoint("TOPLEFT", yOffsetDownButton, "TOPRIGHT", 4, 0)
     yOffsetUpButton:SetSize(28, 28)
     yOffsetUpButton:SetScript("OnClick", function()
         if IsShiftKeyDown() then
@@ -195,19 +264,30 @@ local function main()
     end)
     frame.yOffsetContainer.upButton = yOffsetUpButton
 
-    local yOffsetDownButton = CreateFrame("Button", nil, yOffsetContainer, "UIPanelSquareButton")
-    SquareButton_SetIcon(yOffsetDownButton, "DOWN")
-    yOffsetDownButton:SetPoint("TOPLEFT", yOffsetUpButton, "TOPRIGHT", 4, 0)
-    yOffsetDownButton:SetSize(28, 28)
-    yOffsetDownButton:SetScript("OnClick", function()
-        if IsShiftKeyDown() then
-            emm.offsetY = emm.offsetY - 10
-        else
-            emm.offsetY = emm.offsetY - 1
-        end
-        applySettings()
+    -- disabled message
+    local disabledMessage = frame:CreateFontString(nil, "ARTWORK", "GameFontHighlightMedium")
+    disabledMessage:SetText("**Drag to unlock**")
+    disabledMessage:SetTextColor(1, 0, 0)
+    disabledMessage:SetPoint("BOTTOMLEFT", frame, "BOTTOMLEFT", 0, 0)
+    disabledMessage:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", 0, 0)
+    disabledMessage:SetHeight(32)
+    disabledMessage:Hide()
+    frame.disabledMessage = disabledMessage
+
+    -- hooks
+    hooksecurefunc(EditModeSystemSettingsDialog, "UpdateDialog", function(_, systemFrame)
+        updateDialog(systemFrame)
     end)
-    frame.yOffsetContainer.downButton = yOffsetDownButton
+
+    hooksecurefunc(EditModeManagerFrame, "SelectSystem", function(_, selectFrame)
+        if selectFrame ~= emm.selectedFrame then
+            updateDialog(selectFrame)
+        end
+    end)
+
+    hooksecurefunc(EditModeManagerFrame, "ClearSelectedSystem", function()
+        emm.selectedFrame = nil
+    end)
 end
 
 -- fire on addon loaded
