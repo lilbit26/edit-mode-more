@@ -10,61 +10,49 @@ local function toRoundedNumber(text)
 end
 
 local function updateCurrentSettings(systemFrame)
-    local point, relativeTo, relativePoint, offsetX, offsetY = systemFrame:GetPoint()
+    local point, attachFrame, attachPoint, xOffset, yOffset = systemFrame:GetPoint()
 
     -- cache current frame info
     emm.selectedFrame = systemFrame
     emm.point = point
-    emm.relativeTo = relativeTo
-    emm.relativePoint = relativePoint
-    emm.offsetX = offsetX
-    emm.offsetY = offsetY
+    emm.attachFrame = attachFrame
+    emm.attachPoint = attachPoint
+    emm.xOffset = xOffset
+    emm.yOffset = yOffset
 
-    -- update edit boxes
-    emm.frame.xOffsetContainer.editBox:SetText(tostring(toRoundedNumber(offsetX)))
-    emm.frame.yOffsetContainer.editBox:SetText(tostring(toRoundedNumber(offsetY)))
+    -- update current settings values
+    emm.frame.xOffsetContainer.editBox:SetText(tostring(toRoundedNumber(xOffset)))
+    emm.frame.yOffsetContainer.editBox:SetText(tostring(toRoundedNumber(yOffset)))
+    emm.frame.pointContainer.dropdown:GenerateMenu()
+    emm.frame.attachFrameContainer.editBox:SetText(attachFrame:GetName())
+    emm.frame.attachPointContainer.dropdown:GenerateMenu()
+    emm.frame.frameNameContainer.editBox:SetText(systemFrame:GetName())
 end
 
 local function disableOffsetSettings()
     emm.frame.xOffsetContainer.editBox:Disable()
-    emm.frame.xOffsetContainer.editBox:SetAlpha(0.5)
-
-    emm.frame.yOffsetContainer.editBox:Disable()
-    emm.frame.yOffsetContainer.editBox:SetAlpha(0.5)
-
     emm.frame.xOffsetContainer.leftButton:Disable()
-    emm.frame.xOffsetContainer.leftButton:SetAlpha(0.5)
-
     emm.frame.xOffsetContainer.rightButton:Disable()
-    emm.frame.xOffsetContainer.rightButton:SetAlpha(0.5)
-
+    emm.frame.yOffsetContainer.editBox:Disable()
     emm.frame.yOffsetContainer.downButton:Disable()
-    emm.frame.yOffsetContainer.downButton:SetAlpha(0.5)
-
     emm.frame.yOffsetContainer.upButton:Disable()
-    emm.frame.yOffsetContainer.upButton:SetAlpha(0.5)
+    emm.frame.pointContainer.dropdown:Disable()
+    emm.frame.attachFrameContainer.editBox:Disable()
+    emm.frame.attachPointContainer.dropdown:Disable()
 
     emm.frame.disabledMessage:Show()
 end
 
 local function enableOffsetSettings()
     emm.frame.xOffsetContainer.editBox:Enable()
-    emm.frame.xOffsetContainer.editBox:SetAlpha(1)
-
-    emm.frame.yOffsetContainer.editBox:Enable()
-    emm.frame.yOffsetContainer.editBox:SetAlpha(1)
-
     emm.frame.xOffsetContainer.leftButton:Enable()
-    emm.frame.xOffsetContainer.leftButton:SetAlpha(1)
-
     emm.frame.xOffsetContainer.rightButton:Enable()
-    emm.frame.xOffsetContainer.rightButton:SetAlpha(1)
-
+    emm.frame.yOffsetContainer.editBox:Enable()
     emm.frame.yOffsetContainer.downButton:Enable()
-    emm.frame.yOffsetContainer.downButton:SetAlpha(1)
-
     emm.frame.yOffsetContainer.upButton:Enable()
-    emm.frame.yOffsetContainer.upButton:SetAlpha(1)
+    emm.frame.pointContainer.dropdown:Enable()
+    emm.frame.attachFrameContainer.editBox:Enable()
+    emm.frame.attachPointContainer.dropdown:Enable()
 
     emm.frame.disabledMessage:Hide()
 end
@@ -73,23 +61,24 @@ local function updateDialog(systemFrame)
     if not EditModeSystemSettingsDialog:IsShown() then return end
 
     updateCurrentSettings(systemFrame)
-    if emm.selectedFrame.isManagedFrame and emm.selectedFrame:IsInDefaultPosition() and emm.relativeTo:GetName() == "UIParentBottomManagedFrameContainer" then
+    if emm.selectedFrame.isManagedFrame and emm.selectedFrame:IsInDefaultPosition() and emm.attachFrame:GetName() == "UIParentBottomManagedFrameContainer" then
         disableOffsetSettings()
     else
         enableOffsetSettings()
     end
 
-    -- divider + x offset + y offset
-    local height = (EditModeSystemSettingsDialog:GetHeight() - 6) + (16 + 32 + 32)
-    if emm.frame.disabledMessage:IsShown() then
-        height = height + 32
-    end
-
-    EditModeSystemSettingsDialog:SetHeight(height)
-
     emm.frame:ClearAllPoints()
     emm.frame:SetPoint("TOPLEFT", EditModeSystemSettingsDialog.Buttons, "BOTTOMLEFT", 0, -2)
-    emm.frame:SetPoint("BOTTOMRIGHT", EditModeSystemSettingsDialog, "BOTTOMRIGHT", -16, 16)
+
+    local height = 16 + 32 * 6 -- divider and settings
+    if emm.frame.disabledMessage:IsShown() then
+        height = height + 32   -- disabled message
+    end
+    emm.frame:SetSize(360, height)
+
+    if EditModeSystemSettingsDialog:GetTop() and emm.frame:GetBottom() then
+        EditModeSystemSettingsDialog:SetHeight(EditModeSystemSettingsDialog:GetTop() - emm.frame:GetBottom() + 20)
+    end
 end
 
 local function applySettings()
@@ -99,11 +88,15 @@ local function applySettings()
         emm.selectedFrame:BreakFromFrameManager()
     end
 
+    if emm.selectedFrame == PlayerCastingBarFrame then
+        EditModeManagerFrame:OnSystemSettingChange(emm.selectedFrame, Enum.EditModeCastBarSetting.LockToPlayerFrame, 0);
+    end
+
     emm.selectedFrame:ClearFrameSnap()
     emm.selectedFrame:StopMovingOrSizing();
 
     emm.selectedFrame:ClearAllPoints()
-    emm.selectedFrame:SetPoint(emm.point, emm.relativeTo, emm.relativePoint, emm.offsetX, emm.offsetY)
+    emm.selectedFrame:SetPoint(emm.point, emm.attachFrame, emm.attachPoint, emm.xOffset, emm.yOffset)
 
     if emm.selectedFrame.OnSystemPositionChange then
         emm.selectedFrame:OnSystemPositionChange()
@@ -125,6 +118,126 @@ local function setupEditBox(editBox)
     end)
     editBox:HookScript("OnEscapePressed", function()
         editBox:SetText(emm.oldText)
+    end)
+end
+
+local function setupPointDropdown(dropdown)
+    local function isSelected(index)
+        if emm.point == "CENTER" then
+            return index == 0
+        elseif emm.point == "TOP" then
+            return index == 1
+        elseif emm.point == "BOTTOM" then
+            return index == 2
+        elseif emm.point == "LEFT" then
+            return index == 3
+        elseif emm.point == "RIGHT" then
+            return index == 4
+        elseif emm.point == "TOPLEFT" then
+            return index == 5
+        elseif emm.point == "TOPRIGHT" then
+            return index == 6
+        elseif emm.point == "BOTTOMLEFT" then
+            return index == 7
+        elseif emm.point == "BOTTOMRIGHT" then
+            return index == 8
+        end
+    end
+
+    local function SetSelected(index)
+        if index == 0 then
+            emm.point = "CENTER"
+        elseif index == 1 then
+            emm.point = "TOP"
+        elseif index == 2 then
+            emm.point = "BOTTOM"
+        elseif index == 3 then
+            emm.point = "LEFT"
+        elseif index == 4 then
+            emm.point = "RIGHT"
+        elseif index == 5 then
+            emm.point = "TOPLEFT"
+        elseif index == 6 then
+            emm.point = "TOPRIGHT"
+        elseif index == 7 then
+            emm.point = "BOTTOMLEFT"
+        elseif index == 8 then
+            emm.point = "BOTTOMRIGHT"
+        end
+
+        applySettings()
+    end
+
+    dropdown:SetupMenu(function(_, rootDescription)
+        rootDescription:CreateRadio("CENTER", isSelected, SetSelected, 0);
+        rootDescription:CreateRadio("TOP", isSelected, SetSelected, 1);
+        rootDescription:CreateRadio("BOTTOM", isSelected, SetSelected, 2);
+        rootDescription:CreateRadio("LEFT", isSelected, SetSelected, 3);
+        rootDescription:CreateRadio("RIGHT", isSelected, SetSelected, 4);
+        rootDescription:CreateRadio("TOPLEFT", isSelected, SetSelected, 5);
+        rootDescription:CreateRadio("TOPRIGHT", isSelected, SetSelected, 6);
+        rootDescription:CreateRadio("BOTTOMLEFT", isSelected, SetSelected, 7);
+        rootDescription:CreateRadio("BOTTOMRIGHT", isSelected, SetSelected, 8);
+    end)
+end
+
+local function setupRelativePointDropdown(dropdown)
+    local function isSelected(index)
+        if emm.attachPoint == "CENTER" then
+            return index == 0
+        elseif emm.attachPoint == "TOP" then
+            return index == 1
+        elseif emm.attachPoint == "BOTTOM" then
+            return index == 2
+        elseif emm.attachPoint == "LEFT" then
+            return index == 3
+        elseif emm.attachPoint == "RIGHT" then
+            return index == 4
+        elseif emm.attachPoint == "TOPLEFT" then
+            return index == 5
+        elseif emm.attachPoint == "TOPRIGHT" then
+            return index == 6
+        elseif emm.attachPoint == "BOTTOMLEFT" then
+            return index == 7
+        elseif emm.attachPoint == "BOTTOMRIGHT" then
+            return index == 8
+        end
+    end
+
+    local function SetSelected(index)
+        if index == 0 then
+            emm.attachPoint = "CENTER"
+        elseif index == 1 then
+            emm.attachPoint = "TOP"
+        elseif index == 2 then
+            emm.attachPoint = "BOTTOM"
+        elseif index == 3 then
+            emm.attachPoint = "LEFT"
+        elseif index == 4 then
+            emm.attachPoint = "RIGHT"
+        elseif index == 5 then
+            emm.attachPoint = "TOPLEFT"
+        elseif index == 6 then
+            emm.attachPoint = "TOPRIGHT"
+        elseif index == 7 then
+            emm.attachPoint = "BOTTOMLEFT"
+        elseif index == 8 then
+            emm.attachPoint = "BOTTOMRIGHT"
+        end
+
+        applySettings()
+    end
+
+    dropdown:SetupMenu(function(_, rootDescription)
+        rootDescription:CreateRadio("CENTER", isSelected, SetSelected, 0);
+        rootDescription:CreateRadio("TOP", isSelected, SetSelected, 1);
+        rootDescription:CreateRadio("BOTTOM", isSelected, SetSelected, 2);
+        rootDescription:CreateRadio("LEFT", isSelected, SetSelected, 3);
+        rootDescription:CreateRadio("RIGHT", isSelected, SetSelected, 4);
+        rootDescription:CreateRadio("TOPLEFT", isSelected, SetSelected, 5);
+        rootDescription:CreateRadio("TOPRIGHT", isSelected, SetSelected, 6);
+        rootDescription:CreateRadio("BOTTOMLEFT", isSelected, SetSelected, 7);
+        rootDescription:CreateRadio("BOTTOMRIGHT", isSelected, SetSelected, 8);
     end)
 end
 
@@ -166,14 +279,14 @@ local function main()
 
     local xOffsetEditBox = CreateFrame("EditBox", nil, xOffsetContainer, "InputBoxTemplate")
     setupEditBox(xOffsetEditBox)
-    xOffsetEditBox:SetPoint("TOPLEFT", xOffsetLabel, "TOPRIGHT", 0, 0)
+    xOffsetEditBox:SetPoint("LEFT", xOffsetLabel, "RIGHT", 10, 0)
     xOffsetEditBox:SetSize(110, 32)
     xOffsetEditBox:SetScript("OnEnterPressed", function()
         local offset = toRoundedNumber(xOffsetEditBox:GetText())
         if offset == nil then
             xOffsetEditBox:SetText(emm.oldText)
         else
-            emm.offsetX = offset
+            emm.xOffset = offset
             applySettings()
         end
     end)
@@ -181,13 +294,13 @@ local function main()
 
     local xOffsetLeftButton = CreateFrame("Button", nil, xOffsetContainer, "UIPanelSquareButton")
     SquareButton_SetIcon(xOffsetLeftButton, "LEFT")
-    xOffsetLeftButton:SetPoint("TOPLEFT", xOffsetEditBox, "TOPRIGHT", 10, -2)
+    xOffsetLeftButton:SetPoint("LEFT", xOffsetEditBox, "RIGHT", 10, 0)
     xOffsetLeftButton:SetSize(28, 28)
     xOffsetLeftButton:SetScript("OnClick", function()
         if IsShiftKeyDown() then
-            emm.offsetX = emm.offsetX - 10
+            emm.xOffset = emm.xOffset - 10
         else
-            emm.offsetX = emm.offsetX - 1
+            emm.xOffset = emm.xOffset - 1
         end
         applySettings()
     end)
@@ -195,13 +308,13 @@ local function main()
 
     local xOffsetRightButton = CreateFrame("Button", nil, xOffsetContainer, "UIPanelSquareButton")
     SquareButton_SetIcon(xOffsetRightButton, "RIGHT")
-    xOffsetRightButton:SetPoint("TOPLEFT", xOffsetLeftButton, "TOPRIGHT", 4, 0)
+    xOffsetRightButton:SetPoint("LEFT", xOffsetLeftButton, "RIGHT", 4, 0)
     xOffsetRightButton:SetSize(28, 28)
     xOffsetRightButton:SetScript("OnClick", function()
         if IsShiftKeyDown() then
-            emm.offsetX = emm.offsetX + 10
+            emm.xOffset = emm.xOffset + 10
         else
-            emm.offsetX = emm.offsetX + 1
+            emm.xOffset = emm.xOffset + 1
         end
         applySettings()
     end)
@@ -223,14 +336,14 @@ local function main()
 
     local yOffsetEditBox = CreateFrame("EditBox", nil, yOffsetContainer, "InputBoxTemplate")
     setupEditBox(yOffsetEditBox)
-    yOffsetEditBox:SetPoint("TOPLEFT", yOffsetLabel, "TOPRIGHT", 0, 0)
+    yOffsetEditBox:SetPoint("LEFT", yOffsetLabel, "RIGHT", 10, 0)
     yOffsetEditBox:SetSize(110, 32)
     yOffsetEditBox:SetScript("OnEnterPressed", function()
         local offset = toRoundedNumber(yOffsetEditBox:GetText())
         if offset == nil then
             yOffsetEditBox:SetText(emm.oldText)
         else
-            emm.offsetY = offset
+            emm.yOffset = offset
             applySettings()
         end
     end)
@@ -238,13 +351,13 @@ local function main()
 
     local yOffsetDownButton = CreateFrame("Button", nil, yOffsetContainer, "UIPanelSquareButton")
     SquareButton_SetIcon(yOffsetDownButton, "DOWN")
-    yOffsetDownButton:SetPoint("TOPLEFT", yOffsetEditBox, "TOPRIGHT", 10, -2)
+    yOffsetDownButton:SetPoint("LEFT", yOffsetEditBox, "RIGHT", 10, 0)
     yOffsetDownButton:SetSize(28, 28)
     yOffsetDownButton:SetScript("OnClick", function()
         if IsShiftKeyDown() then
-            emm.offsetY = emm.offsetY - 10
+            emm.yOffset = emm.yOffset - 10
         else
-            emm.offsetY = emm.offsetY - 1
+            emm.yOffset = emm.yOffset - 1
         end
         applySettings()
     end)
@@ -252,21 +365,113 @@ local function main()
 
     local yOffsetUpButton = CreateFrame("Button", nil, yOffsetContainer, "UIPanelSquareButton")
     SquareButton_SetIcon(yOffsetUpButton, "UP")
-    yOffsetUpButton:SetPoint("TOPLEFT", yOffsetDownButton, "TOPRIGHT", 4, 0)
+    yOffsetUpButton:SetPoint("LEFT", yOffsetDownButton, "RIGHT", 4, 0)
     yOffsetUpButton:SetSize(28, 28)
     yOffsetUpButton:SetScript("OnClick", function()
         if IsShiftKeyDown() then
-            emm.offsetY = emm.offsetY + 10
+            emm.yOffset = emm.yOffset + 10
         else
-            emm.offsetY = emm.offsetY + 1
+            emm.yOffset = emm.yOffset + 1
         end
         applySettings()
     end)
     frame.yOffsetContainer.upButton = yOffsetUpButton
 
+    -- point
+    local pointContainer = CreateFrame("Frame", nil, frame)
+    pointContainer:SetPoint("TOPLEFT", yOffsetContainer, "BOTTOMLEFT", 0, 0)
+    pointContainer:SetPoint("TOPRIGHT", yOffsetContainer, "BOTTOMRIGHT", 0, 0)
+    pointContainer:SetHeight(32)
+    frame.pointContainer = pointContainer
+
+    local pointLabel = pointContainer:CreateFontString(nil, "ARTWORK", "GameFontHighlightMedium")
+    setupLabel(pointLabel)
+    pointLabel:SetText("Point")
+    pointLabel:SetPoint("TOPLEFT", pointContainer, "TOPLEFT", 0, 0)
+    pointLabel:SetSize(100, 32)
+    frame.pointContainer.label = pointLabel
+
+    local pointDropdown = CreateFrame("DropdownButton", nil, pointContainer, "WowStyle1DropdownTemplate")
+    setupPointDropdown(pointDropdown)
+    pointDropdown:SetPoint("LEFT", pointLabel, "RIGHT", 5, 0)
+    pointDropdown:SetSize(225, 26)
+    frame.pointContainer.dropdown = pointDropdown
+
+    -- attach frame
+    local attachFrameContainer = CreateFrame("Frame", nil, frame)
+    attachFrameContainer:SetPoint("TOPLEFT", pointContainer, "BOTTOMLEFT", 0, 0)
+    attachFrameContainer:SetPoint("TOPRIGHT", pointContainer, "BOTTOMRIGHT", 0, 0)
+    attachFrameContainer:SetHeight(32)
+    frame.attachFrameContainer = attachFrameContainer
+
+    local attachFrameLabel = attachFrameContainer:CreateFontString(nil, "ARTWORK", "GameFontHighlightMedium")
+    setupLabel(attachFrameLabel)
+    attachFrameLabel:SetText("Attach to")
+    attachFrameLabel:SetPoint("TOPLEFT", attachFrameContainer, "TOPLEFT", 0, 0)
+    attachFrameLabel:SetSize(100, 32)
+    frame.attachFrameContainer.label = attachFrameLabel
+
+    local attachFrameEditBox = CreateFrame("EditBox", nil, attachFrameContainer, "InputBoxTemplate")
+    setupEditBox(attachFrameEditBox)
+    attachFrameEditBox:SetPoint("LEFT", attachFrameLabel, "RIGHT", 10, 0)
+    attachFrameEditBox:SetSize(220, 32)
+    attachFrameEditBox:SetScript("OnEnterPressed", function()
+        local frameName = attachFrameEditBox:GetText()
+        if _G[frameName] ~= nil and C_Widget.IsFrameWidget(_G[frameName]) then
+            emm.attachFrame = _G[frameName]
+            applySettings()
+        else
+            attachFrameEditBox:SetText(emm.oldText)
+        end
+    end)
+    frame.attachFrameContainer.editBox = attachFrameEditBox
+
+    -- attach point
+    local attachPointContainer = CreateFrame("Frame", nil, frame)
+    attachPointContainer:SetPoint("TOPLEFT", attachFrameContainer, "BOTTOMLEFT", 0, 0)
+    attachPointContainer:SetPoint("TOPRIGHT", attachFrameContainer, "BOTTOMRIGHT", 0, 0)
+    attachPointContainer:SetHeight(32)
+    frame.attachPointContainer = attachPointContainer
+
+    local attachPointLabel = attachPointContainer:CreateFontString(nil, "ARTWORK", "GameFontHighlightMedium")
+    setupLabel(attachPointLabel)
+    attachPointLabel:SetText("Attach Point")
+    attachPointLabel:SetPoint("TOPLEFT", attachPointContainer, "TOPLEFT", 0, 0)
+    attachPointLabel:SetSize(100, 32)
+    frame.attachPointContainer.label = attachPointLabel
+
+    local attachPointDropdown = CreateFrame("DropdownButton", nil, attachPointContainer, "WowStyle1DropdownTemplate")
+    setupRelativePointDropdown(attachPointDropdown)
+    attachPointDropdown:SetPoint("LEFT", attachPointLabel, "RIGHT", 5, 0)
+    attachPointDropdown:SetSize(225, 26)
+    frame.attachPointContainer.dropdown = attachPointDropdown
+
+    -- attach frame
+    local frameNameContainer = CreateFrame("Frame", nil, frame)
+    frameNameContainer:SetPoint("TOPLEFT", attachPointContainer, "BOTTOMLEFT", 0, 0)
+    frameNameContainer:SetPoint("TOPRIGHT", attachPointContainer, "BOTTOMRIGHT", 0, 0)
+    frameNameContainer:SetHeight(32)
+    frame.frameNameContainer = frameNameContainer
+
+    local frameNameLabel = frameNameContainer:CreateFontString(nil, "ARTWORK", "GameFontHighlightMedium")
+    setupLabel(frameNameLabel)
+    frameNameLabel:SetText("Frame Name (Copy Only)")
+    frameNameLabel:SetPoint("TOPLEFT", frameNameContainer, "TOPLEFT", 0, 0)
+    frameNameLabel:SetSize(100, 32)
+    frame.frameNameContainer.label = frameNameLabel
+
+    local frameNameEditBox = CreateFrame("EditBox", nil, frameNameContainer, "InputBoxTemplate")
+    setupEditBox(frameNameEditBox)
+    frameNameEditBox:SetPoint("LEFT", frameNameLabel, "RIGHT", 10, 0)
+    frameNameEditBox:SetSize(220, 32)
+    frameNameEditBox:SetScript("OnEnterPressed", function()
+        frameNameEditBox:SetText(emm.oldText)
+    end)
+    frame.frameNameContainer.editBox = frameNameEditBox
+
     -- disabled message
     local disabledMessage = frame:CreateFontString(nil, "ARTWORK", "GameFontHighlightMedium")
-    disabledMessage:SetText("**Drag to unlock**")
+    disabledMessage:SetText("** Drag to unlock **")
     disabledMessage:SetTextColor(1, 0, 0)
     disabledMessage:SetPoint("BOTTOMLEFT", frame, "BOTTOMLEFT", 0, 0)
     disabledMessage:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", 0, 0)
