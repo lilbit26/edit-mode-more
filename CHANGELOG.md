@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.4.0 - 2025-11-23
+
+- Add anchor settings
+
 ## 0.3.0 - 2025-11-20
 
 - Fix frames with default position
